@@ -14,5 +14,7 @@
         <env name="CACHE_STORE" value="array"/>
         <env name="DB_CONNECTION" value="sqlite"/>
         <env name="DB_DATABASE" value=":memory:"/>
+        <env name="CRAFT_EPHEMERAL" value="true"/>
+        <env name="TESTBENCH_WITHOUT_DEFAULT_MIGRATIONS" value="true"/>
     </php>
 </phpunit>
