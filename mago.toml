@@ -1,0 +1,26 @@
+php-version = "8.5"
+
+[source]
+paths = ["src", "tests", "config"]
+includes = ["vendor"]
+excludes = ["build/**"]
+
+[linter]
+integrations = ["laravel", "pest", "phpunit"]
+minimum-fail-level = "error"
+
+[linter.rules.cyclomatic-complexity]
+threshold = 31
+
+[linter.rules.excessive-parameter-list]
+constructor-threshold = 8
+
+[linter.rules.too-many-methods]
+threshold = 16
+
+[analyzer]
+ignore = ["mixed-argument", "mixed-assignment"]
+
+[formatter]
+preset = "laravel"
+print-width = 120
