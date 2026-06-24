@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace Rias\CraftStaticCache\Commands;
 
+use CraftCms\Cms\Console\CraftCommand;
 use Illuminate\Console\Command;
 use Rias\CraftStaticCache\Invalidator;
 
 class ClearUrlCommand extends Command
 {
-    protected $signature = 'static-cache:clear-url {url}';
+    use CraftCommand;
+
+    protected $signature = 'craft:static-cache:clear-url {url}';
 
     protected $description = 'Clear Craft Static Cache entries for a URL or path.';
 

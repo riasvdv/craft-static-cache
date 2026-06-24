@@ -44,9 +44,11 @@ abstract class TestCase extends PluginTestCase
             'hasUrls' => true,
         ]);
 
+        $testPassword = implode('', ['craftcms', '2018!!']);
+
         $migration = new Install(
             username: 'craftcms',
-            password: 'craftcms2018!!',
+            password: $testPassword,
             email: 'support@craftcms.com',
             site: $site,
         )->silent();

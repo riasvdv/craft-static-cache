@@ -4,13 +4,16 @@ declare(strict_types=1);
 
 namespace Rias\CraftStaticCache\Commands;
 
+use CraftCms\Cms\Console\CraftCommand;
 use Illuminate\Console\Command;
 use Rias\CraftStaticCache\Configuration;
 use Rias\CraftStaticCache\Repositories\CacheEntryRepository;
 
 class StatusCommand extends Command
 {
-    protected $signature = 'static-cache:status';
+    use CraftCommand;
+
+    protected $signature = 'craft:static-cache:status';
 
     protected $description = 'Show Craft Static Cache status.';
 

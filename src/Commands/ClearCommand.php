@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace Rias\CraftStaticCache\Commands;
 
+use CraftCms\Cms\Console\CraftCommand;
 use Illuminate\Console\Command;
 use Rias\CraftStaticCache\Invalidator;
 
 class ClearCommand extends Command
 {
-    protected $signature = 'static-cache:clear';
+    use CraftCommand;
+
+    protected $signature = 'craft:static-cache:clear';
 
     protected $description = 'Clear all Craft Static Cache entries.';
 

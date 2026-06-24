@@ -15,6 +15,9 @@ threshold = 31
 [linter.rules.excessive-parameter-list]
 constructor-threshold = 8
 
+[linter.rules.kan-defect]
+threshold = 2.0
+
 [linter.rules.too-many-methods]
 threshold = 16
 
