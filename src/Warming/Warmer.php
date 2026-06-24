@@ -34,6 +34,7 @@ readonly class Warmer
                     ->withHeaders($options->headers)
                     ->timeout($options->timeout)
                     ->connectTimeout($options->timeout)
+                    ->withUserAgent('CraftCMS Static Cache warmer')
                     ->beforeSending(function () use ($url, &$startedAt): void {
                         $startedAt[$url->url] = (int) hrtime(true);
                     })
