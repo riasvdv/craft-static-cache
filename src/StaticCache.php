@@ -15,6 +15,7 @@ use Rias\CraftStaticCache\Commands\ClearCommand;
 use Rias\CraftStaticCache\Commands\ClearTagsCommand;
 use Rias\CraftStaticCache\Commands\ClearUrlCommand;
 use Rias\CraftStaticCache\Commands\StatusCommand;
+use Rias\CraftStaticCache\Commands\WarmCommand;
 use Rias\CraftStaticCache\Data\CachedResponse;
 use Rias\CraftStaticCache\Http\Middleware\CacheStaticResponse;
 use Rias\CraftStaticCache\Listeners\AddStaticCacheClearOption;
@@ -30,6 +31,7 @@ class StaticCache extends Plugin
         ClearTagsCommand::class,
         ClearUrlCommand::class,
         StatusCommand::class,
+        WarmCommand::class,
     ];
 
     public function registerPlugin(): void

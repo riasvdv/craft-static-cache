@@ -4,8 +4,9 @@
     "type": "craft-plugin",
     "license": "MIT",
     "require": {
+        "ext-uri": "*",
         "php": "^8.5",
-        "craftcms/cms": "^6.0.0@dev"
+        "craftcms/cms": "*"
     },
     "require-dev": {
         "carthage-software/mago": "^1.26",

@@ -62,6 +62,10 @@ The most important options are:
 - `exclude.uriParts`: route patterns that should never be cached.
 - `invalidation.rules`: route patterns that should be cleared when related elements change.
 - `replacers`: classes that implement `Rias\CraftStaticCache\Contracts\Replacer`.
+- `warming.urls`: extra same-site URLs to warm in addition to live entry URLs.
+- `warming.concurrency`: number of concurrent HTTP requests used by the warm command.
+- `warming.timeout`: warm request timeout in seconds.
+- `warming.headers`: headers sent with every warm request.
 
 ## Usage
 
@@ -220,12 +224,54 @@ Register replacers in the config file:
 ],
 ```
 
+## Cache Warming
+
+Warm the cache before visitors hit uncached pages:
+
+```bash
+php craft static-cache:warm
+```
+
+The warm command makes real same-site `GET` requests, so normal Craft routing, middleware, response eligibility, replacers, tags, and optional static file publishing all still apply. It warms live Entry URLs across enabled sites, plus any extra URLs configured in `warming.urls`.
+
+```php
+'warming' => [
+    'urls' => [
+        '/',
+        '/news',
+        '/contact',
+    ],
+
+    'concurrency' => 10,
+    'timeout' => 10,
+    'headers' => [
+        'X-Cache-Warmer' => 'deploy',
+    ],
+],
+```
+
+Relative extra URLs are expanded against every enabled site. Absolute extra URLs must match one of the configured Craft site hosts; external URLs are ignored.
+
+Useful command options:
+
+```bash
+php craft static-cache:warm --all
+php craft static-cache:warm --include="news/*" --exclude="news/private/*"
+php craft static-cache:warm --concurrency=5 --timeout=3
+php craft static-cache:warm --header="X-Cache-Warmer: deploy"
+php craft static-cache:warm --user=deploy --password=secret
+php craft static-cache:warm --insecure
+```
+
+Failed warm requests are reported as warnings, but the command still exits successfully.
+
 ## Commands
 
 You can inspect and clear the cache from the command line:
 
 ```bash
 php craft static-cache:status
+php craft static-cache:warm
 php craft static-cache:clear
 php craft static-cache:clear-url /news
 php craft static-cache:clear-tags static-cache

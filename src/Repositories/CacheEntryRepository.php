@@ -95,4 +95,18 @@ class CacheEntryRepository
     {
         return CacheEntry::query()->count();
     }
+
+    public function existsFor(string $host, string $path, string $query, ?int $siteId): bool
+    {
+        return CacheEntry::query()
+            ->where('host', $host)
+            ->where('path', $path)
+            ->where('query', $query)
+            ->when(
+                $siteId === null,
+                fn ($query) => $query->whereNull('siteId'),
+                fn ($query) => $query->where('siteId', $siteId),
+            )
+            ->exists();
+    }
 }

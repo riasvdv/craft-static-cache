@@ -8,6 +8,7 @@ use CraftCms\Cms\Support\Facades\Sites;
 use CraftCms\Cms\Support\Json;
 use CraftCms\Cms\Support\Str;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Rias\CraftStaticCache\Data\CacheContext;
 use RuntimeException;
 use Throwable;
@@ -47,13 +48,12 @@ readonly class CacheContextFactory
         }
 
         if ($this->config->queryParametersIgnoredByDefault()) {
-            $allowed = array_flip($this->config->allowedQueryParameters());
-            $query = array_intersect_key($query, $allowed);
+            $query = Arr::only($query, $this->config->allowedQueryParameters());
         }
 
         ksort($query);
 
-        return http_build_query($query);
+        return Arr::query($query);
     }
 
     private function fingerprint(string $host, string $path, string $query, ?int $siteId): string

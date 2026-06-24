@@ -94,6 +94,32 @@ return [
     ],
 
     /**
+     * Cache warming makes same-site HTTP requests before visitors hit pages.
+     */
+    'warming' => [
+        /**
+         * Extra URLs to warm in addition to live entry URLs.
+         * Relative paths are expanded for every enabled site.
+         */
+        'urls' => [],
+
+        /**
+         * Number of concurrent HTTP requests.
+         */
+        'concurrency' => 10,
+
+        /**
+         * Request timeout in seconds.
+         */
+        'timeout' => 10,
+
+        /**
+         * Headers sent with every warm request.
+         */
+        'headers' => [],
+    ],
+
+    /**
      * Cache locks prevent duplicate renders for the same URL under load.
      */
     'locks' => [
