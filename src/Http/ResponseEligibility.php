@@ -25,11 +25,11 @@ readonly class ResponseEligibility
             return false;
         }
 
-        if (! $request->isSiteRequest() || $request->isActionRequest()) {
+        if ($request->isSiteRequest() !== true || $request->isActionRequest() === true) {
             return false;
         }
 
-        if ($request->isPreview() || $request->getHadToken()) {
+        if ($request->isPreview() === true || $request->getHadToken() === true) {
             return false;
         }
 

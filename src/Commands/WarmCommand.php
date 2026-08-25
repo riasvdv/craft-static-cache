@@ -15,6 +15,7 @@ use Rias\CraftStaticCache\Warming\Data\WarmOptions;
 use Rias\CraftStaticCache\Warming\Data\WarmResult;
 use Rias\CraftStaticCache\Warming\WarmableUrlCollector;
 use Rias\CraftStaticCache\Warming\Warmer;
+
 use function Laravel\Prompts\info;
 use function Laravel\Prompts\task;
 use function Laravel\Prompts\warning;

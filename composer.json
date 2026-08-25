@@ -6,7 +6,7 @@
     "require": {
         "ext-uri": "*",
         "php": "^8.5",
-        "craftcms/cms": "*"
+        "craftcms/cms": "^6.0.0@dev"
     },
     "require-dev": {
         "carthage-software/mago": "^1.26",
@@ -49,12 +49,7 @@
         "developer": "Rias",
         "developerUrl": "https://rias.be",
         "documentationUrl": "https://github.com/riasvdv/craft-static-cache",
-        "class": "Rias\\CraftStaticCache\\StaticCache",
-        "laravel": {
-            "providers": [
-                "Rias\\CraftStaticCache\\StaticCache"
-            ]
-        }
+        "class": "Rias\\CraftStaticCache\\StaticCache"
     },
     "minimum-stability": "dev",
     "prefer-stable": true

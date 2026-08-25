@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace Rias\CraftStaticCache;
 
 use CraftCms\Cms\Element\Events\ElementCachesInvalidated;
-use CraftCms\Cms\Http\Middleware\HandleMatchedElementRoute;
+use CraftCms\Cms\Http\Middleware\HandleTemplateRequest;
 use CraftCms\Cms\Plugin\Plugin;
-use CraftCms\Cms\Utility\Events\ClearCachesOptionsResolving;
 use Illuminate\Foundation\Console\AboutCommand;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Event;
@@ -18,7 +17,6 @@ use Rias\CraftStaticCache\Commands\StatusCommand;
 use Rias\CraftStaticCache\Commands\WarmCommand;
 use Rias\CraftStaticCache\Data\CachedResponse;
 use Rias\CraftStaticCache\Http\Middleware\CacheStaticResponse;
-use Rias\CraftStaticCache\Listeners\AddStaticCacheClearOption;
 use Rias\CraftStaticCache\Listeners\InvalidateStaticCacheForElement;
 use Rias\CraftStaticCache\Repositories\CacheEntryRepository;
 
@@ -34,7 +32,7 @@ class StaticCache extends Plugin
         WarmCommand::class,
     ];
 
-    public function registerPlugin(): void
+    public function register(): void
     {
         $this->mergeConfigFrom(dirname(__DIR__).'/config/static-cache.php', 'craft.static-cache');
 
@@ -43,13 +41,23 @@ class StaticCache extends Plugin
         ]);
     }
 
-    public function bootPlugin(): void
+    public function boot(): void
     {
         $this->registerMiddleware();
         $this->registerAboutCommandInformation();
 
         Event::listen(ElementCachesInvalidated::class, InvalidateStaticCacheForElement::class);
-        Event::listen(ClearCachesOptionsResolving::class, AddStaticCacheClearOption::class);
+    }
+
+    protected function getCacheOptions(): array
+    {
+        return [
+            'static-cache' => [
+                'label' => 'Static cache',
+                'info' => 'Full-page HTML responses cached by Craft Static Cache.',
+                'action' => fn (): int => app(Invalidator::class)->clearAll(),
+            ],
+        ];
     }
 
     private function registerAboutCommandInformation(): void
@@ -81,7 +89,7 @@ class StaticCache extends Plugin
             fn (string $class): bool => $class !== CacheStaticResponse::class,
         ));
 
-        $position = array_search(HandleMatchedElementRoute::class, $middleware, true);
+        $position = array_search(HandleTemplateRequest::class, $middleware, true);
 
         if ($position === false) {
             $router->pushMiddlewareToGroup('craft.web', CacheStaticResponse::class);
