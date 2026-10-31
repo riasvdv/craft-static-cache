@@ -7,15 +7,19 @@ use CraftCms\Cms\Entry\Elements\Entry;
 use CraftCms\Cms\Section\Data\Section;
 use CraftCms\Cms\Section\Data\SectionSiteSettings;
 use CraftCms\Cms\Section\Enums\SectionType;
+use CraftCms\Cms\Site\Data\Site;
 use CraftCms\Cms\Support\Facades\Elements;
 use CraftCms\Cms\Support\Facades\EntryTypes;
 use CraftCms\Cms\Support\Facades\Sections;
 use CraftCms\Cms\Support\Facades\Sites;
+use Illuminate\Http\Request;
 use Illuminate\Support\Str;
-use Rias\CraftStaticCache\Data\CacheContext;
+use Rias\CraftStaticCache\CacheContextFactory;
 use Rias\CraftStaticCache\Data\CachedResponse;
 use Rias\CraftStaticCache\Repositories\CacheEntryRepository;
+use Rias\CraftStaticCache\Stores\StaticCacheStore;
 use Rias\CraftStaticCache\Warming\WarmableUrlCollector;
+use Symfony\Component\HttpFoundation\Response;
 
 it('collects live entry URLs and configured same-site URLs', function () {
     config()->set('craft.static-cache.queryParameters.ignoreByDefault', true);
@@ -49,39 +53,116 @@ it('filters collected URLs by patterns and uncached state', function () {
     config()->set('craft.static-cache.warming.urls', [
         '/news/cached',
         '/news/fresh',
+        '/news/stale',
+        '/news/excluded',
         '/blog',
     ]);
 
+    app(StaticCacheStore::class)->put(
+        app(CacheContextFactory::class)->make(Request::create('/news/cached')),
+        new Response('<html>Cached</html>'),
+        ['static-cache'],
+    );
+
     app(CacheEntryRepository::class)->put(
-        new CacheContext(
-            key: 'cached-key',
-            url: '/news/cached',
-            host: 'localhost',
-            path: '/news/cached',
-            query: '',
-            siteId: 1,
-            request: request(),
-        ),
+        app(CacheContextFactory::class)->make(Request::create('/news/stale')),
         new CachedResponse(
-            content: '<html>Cached</html>',
-            status: 200,
-            headers: [],
+            content: '<html>Evicted</html>',
             tags: ['static-cache'],
-            filePath: null,
         ),
     );
 
     $collected = app(WarmableUrlCollector::class)->collect(
         include: ['news/*'],
-        exclude: ['news/cached'],
+        exclude: ['news/excluded'],
         uncached: true,
     );
 
+    expect(collect($collected['urls'])->map->url->all())->toBe([
+        'https://localhost/news/fresh',
+        'https://localhost/news/stale',
+    ]);
+});
+
+it('keeps each configured origin distinct and chooses the longest site path', function () {
+    $primary = Sites::getPrimarySite();
+    $portSite = createWarmableSite('https://localhost:8443/');
+    $otherPortSite = createWarmableSite('https://localhost:9443/');
+    $httpSite = createWarmableSite('http://localhost:8443/');
+    $languageSite = createWarmableSite('https://localhost/en/');
+    $nestedSite = createWarmableSite('https://localhost/en/shop/');
+    createWarmableSite('https://disabled.test/', enabled: false);
+
+    config()->set('craft.static-cache.warming.urls', [
+        '/page',
+        'https://localhost:8443/page',
+        'https://disabled.test/page',
+        'https://localhost/enough/page',
+    ]);
+
+    $collected = app(WarmableUrlCollector::class)->collect();
+    $siteIdsByUrl = collect($collected['urls'])->mapWithKeys(fn ($url): array => [$url->url => $url->siteId]);
+
+    expect($siteIdsByUrl->all())
+        ->toEqual([
+            'https://localhost/page' => $primary->id,
+            'https://localhost:8443/page' => $portSite->id,
+            'https://localhost:9443/page' => $otherPortSite->id,
+            'http://localhost:8443/page' => $httpSite->id,
+            'https://localhost/en/page' => $languageSite->id,
+            'https://localhost/en/shop/page' => $nestedSite->id,
+            'https://localhost/enough/page' => $primary->id,
+        ])
+        ->and($collected['warnings'])
+        ->toBe(['Ignored external warm URL [https://disabled.test/page].']);
+});
+
+it('rejects unconfigured schemes and ports on an enabled host', function (string $url) {
+    config()->set('craft.static-cache.warming.urls', [$url]);
+
+    $collected = app(WarmableUrlCollector::class)->collect();
+
+    expect($collected['urls'])
+        ->toBe([])
+        ->and($collected['warnings'])
+        ->toBe(["Ignored external warm URL [{$url}]."]);
+})->with([
+    'different scheme' => 'http://localhost/private',
+    'different port' => 'https://localhost:8443/private',
+    'non-HTTP scheme' => 'ftp://localhost/private',
+]);
+
+it('accepts the default HTTPS port as the configured origin', function () {
+    config()->set('craft.static-cache.warming.urls', ['https://localhost:443/page']);
+
+    $collected = app(WarmableUrlCollector::class)->collect();
+
     expect($collected['urls'])
         ->toHaveCount(1)
-        ->and($collected['urls'][0]->url)
-        ->toBe('https://localhost/news/fresh');
+        ->and($collected['urls'][0]->siteId)
+        ->toBe(Sites::getPrimarySite()->id)
+        ->and($collected['warnings'])
+        ->toBe([]);
 });
+
+function createWarmableSite(string $baseUrl, bool $enabled = true): Site
+{
+    $suffix = Str::lower(Str::random(8));
+    $primary = Sites::getPrimarySite();
+    $site = new Site([
+        'name' => "Warm site {$suffix}",
+        'handle' => "warmSite{$suffix}",
+        'groupId' => $primary->groupId,
+        'language' => 'en-US',
+        'baseUrl' => $baseUrl,
+        'hasUrls' => true,
+        'enabled' => $enabled,
+    ]);
+
+    expect(Sites::saveSite($site))->toBeTrue();
+
+    return $site;
+}
 
 function createWarmableEntry(): Entry
 {

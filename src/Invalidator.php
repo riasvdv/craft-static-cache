@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Rias\CraftStaticCache;
 
+use Closure;
 use CraftCms\Cms\Entry\Elements\Entry;
 use CraftCms\DependencyAwareCache\Dependency\TagDependency;
 use Illuminate\Support\Collection;
@@ -19,17 +20,12 @@ readonly class Invalidator
         private StaticCacheStore $store,
         private Configuration $config,
         private RoutePatternMatcher $patterns,
+        private CacheState $state,
     ) {}
 
     public function clearAll(): int
     {
-        $entries = $this->cacheEntries->all();
-
-        $entries->each(fn (CacheEntry $entry): null => $this->forgetEntry($entry));
-        $this->cacheEntries->clear();
-        TagDependency::invalidate('static-cache');
-
-        return $entries->count();
+        return $this->clearEntries(fn () => $this->cacheEntries->all(), ['static-cache']);
     }
 
     public function clearUrl(string $url): int
@@ -43,12 +39,8 @@ readonly class Invalidator
             )
             ->value();
 
-        $entries = $this->cacheEntries->all()
-            ->filter(static fn (CacheEntry $entry): bool => $entry->path === $path || $entry->url === $url);
-
-        $entries->each(fn (CacheEntry $entry): null => $this->forgetEntry($entry));
-
-        return $entries->count();
+        return $this->clearEntries(fn () => $this->cacheEntries->all()
+            ->filter(static fn (CacheEntry $entry): bool => $entry->path === $path || $entry->url === $url));
     }
 
     /** @param list<string> $tags */
@@ -58,11 +50,7 @@ readonly class Invalidator
             return 0;
         }
 
-        TagDependency::invalidate($tags);
-        $entries = $this->cacheEntries->forTags($tags);
-        $entries->each(fn (CacheEntry $entry): null => $this->forgetEntry($entry));
-
-        return $entries->count();
+        return $this->clearEntries(fn () => $this->cacheEntries->forTags($tags), $tags);
     }
 
     public function clearRules(string $ruleKey = 'all'): int
@@ -73,15 +61,11 @@ readonly class Invalidator
             return 0;
         }
 
-        $entries = $this->cacheEntries->all()
+        return $this->clearEntries(fn () => $this->cacheEntries->all()
             ->filter(fn (CacheEntry $entry): bool => $this->patterns->matchesAny(
                 ltrim($entry->path, '/'),
                 $rules,
-            ));
-
-        $entries->each(fn (CacheEntry $entry): null => $this->forgetEntry($entry));
-
-        return $entries->count();
+            )));
     }
 
     public function clearRulesForEntry(Entry $entry): int
@@ -95,9 +79,25 @@ readonly class Invalidator
         return $this->clearRules($handle);
     }
 
-    private function forgetEntry(CacheEntry $entry): void
+    /**
+     * @param Closure(): Collection<array-key, CacheEntry> $select
+     * @param list<string> $tags
+     */
+    private function clearEntries(Closure $select, array $tags = []): int
     {
-        $this->store->forget($entry->key, $entry->filePath);
+        return $this->state->invalidate(function () use ($select, $tags): int {
+            if ($tags !== []) {
+                TagDependency::invalidate($tags);
+            }
+
+            $entries = $select();
+
+            foreach ($entries as $entry) {
+                $this->store->forget($entry->key, $entry->filePath);
+            }
+
+            return $entries->count();
+        });
     }
 
     /** @return list<mixed> */

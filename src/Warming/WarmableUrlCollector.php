@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Config;
 use Rias\CraftStaticCache\Configuration;
 use Rias\CraftStaticCache\Http\RoutePatternMatcher;
 use Rias\CraftStaticCache\Repositories\CacheEntryRepository;
+use Rias\CraftStaticCache\Stores\StaticCacheStore;
 use Rias\CraftStaticCache\Warming\Data\WarmableUrl;
 use Uri\Rfc3986\Uri;
 
@@ -23,6 +24,8 @@ readonly class WarmableUrlCollector
         private Configuration $config,
         private RoutePatternMatcher $patterns,
         private CacheEntryRepository $cacheEntries,
+        private StaticCacheStore $store,
+        private WarmableSiteMatcher $sites,
     ) {}
 
     /**
@@ -46,13 +49,9 @@ readonly class WarmableUrlCollector
 
         foreach (Config::array('craft.static-cache.warming.urls', []) as $url) {
             if (Url::isAbsoluteUrl($url)) {
-                if (! $this->isSameSiteUrl($url, $sites)) {
+                if (! $this->add($urls, $url, $sites)) {
                     $warnings[] = "Ignored external warm URL [{$url}].";
-
-                    continue;
                 }
-
-                $this->add($urls, $url, $sites);
 
                 continue;
             }
@@ -107,21 +106,23 @@ readonly class WarmableUrlCollector
      * @param  array<string, WarmableUrl>  $urls
      * @param  Collection<int, Site>  $sites
      */
-    private function add(array &$urls, string $url, Collection $sites): void
+    private function add(array &$urls, string $url, Collection $sites): bool
     {
         $uri = Uri::parse($url);
 
         if (! $uri instanceof Uri) {
-            return;
+            return false;
         }
 
         $warmable = $this->normalize($uri, $sites);
 
         if (! $warmable instanceof WarmableUrl) {
-            return;
+            return false;
         }
 
         $urls[$warmable->key()] = $warmable;
+
+        return true;
     }
 
     /**
@@ -138,7 +139,13 @@ readonly class WarmableUrlCollector
             return false;
         }
 
-        return ! $uncached || ! $this->cacheEntries->existsFor($url->host, $url->path, $url->query, $url->siteId);
+        if (! $uncached) {
+            return true;
+        }
+
+        $entry = $this->cacheEntries->findFor($url->host, $url->path, $url->query, $url->siteId);
+
+        return $entry === null || ! $this->store->has($entry->key);
     }
 
     /** @param Collection<int, Site> $sites */
@@ -150,7 +157,7 @@ readonly class WarmableUrlCollector
             return null;
         }
 
-        $site = $this->siteFor($uri, $host, $sites);
+        $site = $this->sites->match($uri, $sites);
 
         if (! $site instanceof Site) {
             return null;
@@ -176,56 +183,6 @@ readonly class WarmableUrlCollector
             query: $this->normalizedQuery($uri->getQuery() ?? ''),
             siteId: $site->id,
         );
-    }
-
-    /** @param Collection<int, Site> $sites */
-    private function isSameSiteUrl(string $url, Collection $sites): bool
-    {
-        $uri = Uri::parse($url);
-        $host = $uri?->getHost();
-
-        if (! $uri instanceof Uri || $host === null) {
-            return false;
-        }
-
-        return $this->siteFor($uri, $host, $sites) instanceof Site;
-    }
-
-    /** @param Collection<int, Site> $sites */
-    private function siteFor(Uri $uri, string $host, Collection $sites): ?Site
-    {
-        $match = null;
-        $matchLength = -1;
-        $urlPath = trim($uri->getPath(), '/');
-
-        foreach ($sites as $site) {
-            $baseUrl = $site->getBaseUrl();
-
-            if ($baseUrl === null) {
-                continue;
-            }
-
-            $baseUri = Uri::parse($baseUrl);
-
-            if (! $baseUri instanceof Uri || $baseUri->getHost() !== $host) {
-                continue;
-            }
-
-            $basePath = trim($baseUri->getPath(), '/');
-
-            if ($basePath !== '' && $urlPath !== $basePath && ! str_starts_with($urlPath, "{$basePath}/")) {
-                continue;
-            }
-
-            if (strlen($basePath) <= $matchLength) {
-                continue;
-            }
-
-            $match = $site;
-            $matchLength = strlen($basePath);
-        }
-
-        return $match;
     }
 
     private function normalizedQuery(string $query): string

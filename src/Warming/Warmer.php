@@ -32,6 +32,7 @@ readonly class Warmer
                 $request = $pool
                     ->as($url->url)
                     ->withHeaders($options->headers)
+                    ->withoutRedirecting()
                     ->timeout($options->timeout)
                     ->connectTimeout($options->timeout)
                     ->withUserAgent('CraftCMS Static Cache warmer')

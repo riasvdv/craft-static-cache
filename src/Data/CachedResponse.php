@@ -16,6 +16,7 @@ class CachedResponse implements Responsable
         public array $headers = [],
         public array $tags = [],
         public ?string $filePath = null,
+        public bool $publishable = true,
     ) {}
 
     public function toResponse($request): Response

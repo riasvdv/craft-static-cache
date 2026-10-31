@@ -8,6 +8,7 @@ use CraftCms\Cms\Console\CraftCommand;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Str;
+use InvalidArgumentException;
 use Laravel\Prompts\Support\Logger;
 use Rias\CraftStaticCache\Warming\Data\WarmableUrl;
 use Rias\CraftStaticCache\Warming\Data\WarmFailure;
@@ -27,7 +28,7 @@ class WarmCommand extends Command
     protected $signature = 'craft:static-cache:warm
         {--include=* : Only warm paths matching these route patterns.}
         {--exclude=* : Skip paths matching these route patterns.}
-        {--all : Warm all URLs, including URLs that are already indexed.}
+        {--all : Warm all URLs, including URLs that are already cached.}
         {--concurrency= : Number of concurrent HTTP requests.}
         {--timeout= : Request timeout in seconds.}
         {--insecure : Skip SSL certificate verification.}
@@ -41,7 +42,13 @@ class WarmCommand extends Command
         WarmableUrlCollector $collector,
         Warmer $warmer,
     ): int {
-        $options = $this->warmOptions();
+        try {
+            $options = $this->warmOptions();
+        } catch (InvalidArgumentException $exception) {
+            $this->error($exception->getMessage());
+
+            return self::INVALID;
+        }
 
         $collected = $collector->collect(
             include: $this->patterns('include'),
@@ -220,6 +227,16 @@ class WarmCommand extends Command
     {
         $value = $this->option($option);
 
-        return $value !== null && $value !== '' ? (int) $value : null;
+        if ($value === null) {
+            return null;
+        }
+
+        $integer = filter_var($value, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+
+        if ($integer === false) {
+            throw new InvalidArgumentException("The --{$option} option must be a positive integer.");
+        }
+
+        return $integer;
     }
 }

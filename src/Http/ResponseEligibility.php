@@ -50,6 +50,12 @@ readonly class ResponseEligibility
             return false;
         }
 
+        foreach (['private', 'no-store', 'no-cache'] as $directive) {
+            if ($response->headers->hasCacheControlDirective($directive)) {
+                return false;
+            }
+        }
+
         $contentType = (string) $response->headers->get('Content-Type', '');
 
         if ($contentType === '') {

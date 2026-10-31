@@ -6,12 +6,12 @@ namespace Rias\CraftStaticCache\Http\Middleware;
 
 use Closure;
 use CraftCms\Cms\Support\Facades\ElementCaches;
-use CraftCms\DependencyAwareCache\Dependency\TagDependency;
 use Illuminate\Contracts\Cache\LockProvider;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Rias\CraftStaticCache\CacheContextFactory;
+use Rias\CraftStaticCache\CacheState;
 use Rias\CraftStaticCache\Configuration;
 use Rias\CraftStaticCache\Data\CacheContext;
 use Rias\CraftStaticCache\Http\ResponseEligibility;
@@ -26,6 +26,7 @@ readonly class CacheStaticResponse
         private ResponseEligibility $eligibility,
         private CacheContextFactory $cacheContext,
         private StaticCacheStore $store,
+        private CacheState $state,
     ) {}
 
     public function handle(Request $request, Closure $next): mixed
@@ -35,16 +36,25 @@ readonly class CacheStaticResponse
         }
 
         $context = $this->cacheContext->make($request);
-        $cached = $this->store->get($context);
+
+        try {
+            $cached = $this->store->get($context);
+        } catch (LockTimeoutException) {
+            return $next($request);
+        }
 
         if ($cached) {
             return $cached;
         }
 
+        if ($request->isMethod('HEAD')) {
+            return $next($request);
+        }
+
         $cacheStore = Cache::store($this->config->lockStore())->getStore();
 
         if (! $cacheStore instanceof LockProvider) {
-            return $this->renderAndStore($request, $next, $context);
+            return $next($request);
         }
 
         $lock = $cacheStore->lock("static-cache:{$context->key}", 30);
@@ -66,11 +76,17 @@ readonly class CacheStaticResponse
             return $cached;
         }
 
+        $version = $this->state->version();
+
+        if ($version === null) {
+            return $next($request);
+        }
+
         ElementCaches::startCollectingCacheInfo();
 
         try {
             $response = $next($request);
-            [$dependency] = ElementCaches::stopCollectingCacheInfo();
+            [$dependency, $ttl] = ElementCaches::stopCollectingCacheInfo();
         } catch (Throwable $throwable) {
             $this->stopCollectingQuietly();
 
@@ -78,28 +94,18 @@ readonly class CacheStaticResponse
         }
 
         if ($response instanceof Response && $this->eligibility->responseIsCacheable($response)) {
-            $tags = $this->tags($dependency);
-            $this->store->put($context, $response, $tags);
-            $response->headers->set('X-Static-Cache', 'MISS');
+            $tags = array_values(array_unique(array_merge(['static-cache'], $dependency?->tags ?? [])));
+
+            try {
+                if ($this->store->put($context, $response, $tags, $ttl, $version)) {
+                    $response->headers->set('X-Static-Cache', 'MISS');
+                }
+            } catch (LockTimeoutException) {
+                // Keep the rendered response when invalidation holds the mutation lock.
+            }
         }
 
         return $response;
-    }
-
-    /** @return list<string> */
-    private function tags(?TagDependency $dependency): array
-    {
-        $tags = ['static-cache'];
-
-        if ($dependency === null) {
-            return $tags;
-        }
-
-        foreach ($dependency->tags as $tag) {
-            $tags[] = $tag;
-        }
-
-        return array_values(array_unique($tags));
     }
 
     private function stopCollectingQuietly(): void

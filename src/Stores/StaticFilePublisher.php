@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Rias\CraftStaticCache\Stores;
 
-use CraftCms\Cms\Support\File;
 use Illuminate\Support\Facades\File as Files;
 use Rias\CraftStaticCache\Configuration;
 use Rias\CraftStaticCache\Data\CacheContext;
@@ -17,21 +16,33 @@ readonly class StaticFilePublisher
 
     public function publish(CacheContext $context, string $content): ?string
     {
-        if (! $this->shouldPublish()) {
+        if (! $this->config->publish()) {
             return null;
         }
 
         $filePath = $this->filePath($context);
 
-        File::ensureDirectoryExists(dirname($filePath), $this->config->diskPermissions());
-
-        if (file_put_contents($filePath, $content, LOCK_EX) === false) {
+        if ($filePath === null) {
             return null;
         }
 
-        chmod($filePath, 0o644);
+        $temporary = tempnam(dirname($filePath), '.static-cache-');
 
-        return $filePath;
+        if ($temporary === false) {
+            return null;
+        }
+
+        try {
+            if (file_put_contents($temporary, $content) === false || ! chmod($temporary, 0o644)) {
+                return null;
+            }
+
+            return rename($temporary, $filePath) ? $filePath : null;
+        } finally {
+            if (is_file($temporary)) {
+                unlink($temporary);
+            }
+        }
     }
 
     public function forget(?string $filePath): void
@@ -41,28 +52,48 @@ readonly class StaticFilePublisher
         }
     }
 
-    private function shouldPublish(): bool
-    {
-        return $this->config->publish();
-    }
-
-    private function filePath(CacheContext $context): string
+    private function filePath(CacheContext $context): ?string
     {
         $base = rtrim($this->config->diskPath(), '/');
-        $parts = [
-            $base,
-            preg_replace('/[^a-z0-9.-]+/i', '-', $context->host) ?: 'default',
-        ];
+        $host = preg_replace('/[^a-z0-9.-]+/i', '-', $context->host) ?: 'default';
+        $parts = array_values(array_filter(
+            explode('/', $host.'/'.trim($context->path, '/')),
+            static fn (string $part): bool => $part !== '',
+        ));
 
-        $path = pathinfo($context->path);
-        $directory = trim($path['dirname'] ?? '', '/');
-
-        if ($directory !== '') {
-            $parts[] = $directory;
+        if (strpbrk($context->path.$context->query, "\\\0") !== false || str_contains($context->query, '/')) {
+            return null;
         }
 
-        $slug = $path['basename'];
+        foreach ($parts as $part) {
+            if ($part === '.' || $part === '..') {
+                return null;
+            }
+        }
 
-        return implode('/', $parts)."/{$slug}_{$context->query}.html";
+        Files::makeDirectory($base, $this->config->diskPermissions(), true, true);
+        $root = realpath($base);
+
+        if ($root === false) {
+            return null;
+        }
+
+        $directory = $root;
+
+        foreach ($parts as $part) {
+            $directory .= '/'.$part;
+
+            if (is_link($directory)) {
+                return null;
+            }
+
+            Files::makeDirectory($directory, $this->config->diskPermissions(), false, true);
+
+            if (! is_dir($directory) || ! str_starts_with((string) realpath($directory), $root.'/')) {
+                return null;
+            }
+        }
+
+        return $directory."/index_{$context->query}.html";
     }
 }

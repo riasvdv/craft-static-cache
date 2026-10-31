@@ -126,6 +126,8 @@ return [
         /**
          * Laravel cache store used for locks.
          * Set to null to use the application's default cache store.
+         * Must support atomic locks and be shared by all application processes.
+         * New responses are not cached if the store does not support locks.
          */
         'store' => null,
 

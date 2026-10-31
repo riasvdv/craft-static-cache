@@ -6,6 +6,7 @@ namespace Rias\CraftStaticCache\Stores;
 
 use CraftCms\DependencyAwareCache\Dependency\TagDependency;
 use CraftCms\DependencyAwareCache\Facades\DependencyCache;
+use Rias\CraftStaticCache\CacheState;
 use Rias\CraftStaticCache\Configuration;
 use Rias\CraftStaticCache\Data\CacheContext;
 use Rias\CraftStaticCache\Data\CachedResponse;
@@ -20,46 +21,80 @@ readonly class StaticCacheStore
         private Replacers $replacers,
         private CacheEntryRepository $index,
         private StaticFilePublisher $files,
+        private CacheState $state,
     ) {}
 
     public function get(CacheContext $context): ?CachedResponse
     {
-        $cached = DependencyCache::store($this->config->store())->get($this->cacheKey($context->key));
+        return $this->state->synchronized(function () use ($context): ?CachedResponse {
+            $cached = DependencyCache::store($this->config->store())->get($this->cacheKey($context->key));
 
-        if (! $cached instanceof CachedResponse) {
-            return null;
-        }
+            if (! $cached instanceof CachedResponse) {
+                $entry = $this->index->find($context->key);
 
-        $cached = $this->ensureFilePublished($context, $cached);
+                if ($entry !== null) {
+                    $this->forget($context->key, $entry->filePath);
+                }
 
-        return new CachedResponse(
-            content: $this->replacers->replace($cached->content, $context),
-            status: $cached->status,
-            headers: $cached->headers,
-            tags: $cached->tags,
-            filePath: $cached->filePath,
-        );
+                return null;
+            }
+
+            $response = clone $this->ensureFilePublished($context, $cached);
+            $response->content = $this->replacers->replace($cached->content, $context);
+
+            return $response;
+        });
     }
 
-    public function put(CacheContext $context, Response $response, array $tags): void
+    public function has(string $key): bool
     {
-        $content = $this->replacers->prepare((string) $response->getContent(), $context);
-        $filePath = $this->files->publish($context, $content);
+        return DependencyCache::store($this->config->store())->get($this->cacheKey($key)) instanceof CachedResponse;
+    }
+
+    public function put(
+        CacheContext $context,
+        Response $response,
+        array $tags,
+        ?int $ttl = null,
+        ?string $version = null,
+    ): bool {
+        $version ??= $this->state->version();
+
+        if ($version === null || $ttl !== null && $ttl <= 0) {
+            return false;
+        }
+
+        $original = (string) $response->getContent();
+        $content = $this->replacers->prepare($original, $context);
+        $expiresAt = $ttl !== null ? now()->getTimestamp() + $ttl : null;
         $cached = new CachedResponse(
             content: $content,
             status: $response->getStatusCode(),
             headers: $this->cacheableHeaders($response),
             tags: $tags,
-            filePath: $filePath,
+            publishable: $content === $original && $ttl === null,
         );
 
-        DependencyCache::store($this->config->store())->forever(
-            $this->cacheKey($context->key),
-            $cached,
-            new TagDependency($tags),
-        );
+        return $this->state->synchronized(function () use ($context, $cached, $version, $expiresAt): bool {
+            if (! $this->state->isCurrent($version)) {
+                return false;
+            }
 
-        $this->index->put($context, $cached);
+            if ($cached->publishable) {
+                $cached->filePath = $this->files->publish($context, $cached->content);
+            }
+
+            $ttl = $expiresAt !== null ? max(0, $expiresAt - now()->getTimestamp()) : null;
+            $this->save($context, $cached, $ttl);
+
+            if (! $this->state->isCurrent($version)) {
+                $this->forget($context->key, $cached->filePath);
+
+                return false;
+            }
+
+            return true;
+        });
     }
 
     public function forget(string $key, ?string $filePath = null): void
@@ -71,7 +106,7 @@ readonly class StaticCacheStore
 
     private function ensureFilePublished(CacheContext $context, CachedResponse $cached): CachedResponse
     {
-        if (! $this->config->publish()) {
+        if (! $this->config->publish() || ! $cached->publishable) {
             return $cached;
         }
 
@@ -85,40 +120,50 @@ readonly class StaticCacheStore
             return $cached;
         }
 
-        $cached = new CachedResponse(
-            content: $cached->content,
-            status: $cached->status,
-            headers: $cached->headers,
-            tags: $cached->tags,
-            filePath: $filePath,
-        );
-
-        DependencyCache::store($this->config->store())->forever(
-            $this->cacheKey($context->key),
-            $cached,
-            new TagDependency($cached->tags),
-        );
-
-        $this->index->put($context, $cached);
+        $cached = clone $cached;
+        $cached->filePath = $filePath;
+        $this->save($context, $cached);
 
         return $cached;
     }
 
+    private function save(CacheContext $context, CachedResponse $cached, ?int $ttl = null): void
+    {
+        DependencyCache::store($this->config->store())->put(
+            $this->cacheKey($context->key),
+            $cached,
+            $ttl,
+            new TagDependency($cached->tags),
+        );
+
+        $this->index->put($context, $cached);
+    }
+
     private function cacheKey(string $key): string
     {
-        return "static-cache:{$key}";
+        return "static-cache:v2:{$key}";
     }
 
     private function cacheableHeaders(Response $response): array
     {
-        $headers = [];
+        $headers = $response->headers->all();
+        $connectionHeaders = explode(',', (string) $response->headers->get('Connection', ''));
 
-        foreach (['content-type', 'cache-control', 'etag', 'last-modified'] as $name) {
-            $values = $response->headers->all($name);
-
-            if ($values !== []) {
-                $headers[$name] = implode(', ', $values);
-            }
+        foreach (array_merge($connectionHeaders, [
+            'connection',
+            'keep-alive',
+            'proxy-authenticate',
+            'proxy-authorization',
+            'te',
+            'trailer',
+            'transfer-encoding',
+            'upgrade',
+            'set-cookie',
+            'content-length',
+            'date',
+            'age',
+        ]) as $name) {
+            unset($headers[strtolower(trim($name))]);
         }
 
         return $headers;

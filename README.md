@@ -69,11 +69,13 @@ The most important options are:
 
 ## Usage
 
-Once `enabled` is set to `true`, the package will cache anonymous `GET` and `HEAD` site requests that return a cacheable HTML response.
+Once `enabled` is set to `true`, the package will cache anonymous `GET` site requests that return a publicly cacheable HTML response. `HEAD` requests can read existing entries but never create them.
 
-Requests are not cached when they are action requests, preview requests, tokenized requests, authenticated requests, or match an excluded URI pattern. Responses are not cached when they are not `200` responses, set cookies, or are non-HTML responses.
+Requests are not cached when they are action requests, preview requests, tokenized requests, authenticated requests, or match an excluded URI pattern. Responses are not cached when they are not `200` responses, set cookies, are non-HTML responses, or include `private`, `no-store`, or `no-cache` in `Cache-Control`. Laravel responses default to private; explicitly mark public pages with `Cache-Control: public` in the response or in middleware that runs inside the static cache middleware.
 
-Cached entries are tagged with Craft element cache dependencies. When Craft invalidates element caches, related static cache entries are cleared as well.
+Cached entries are tagged with Craft element cache dependencies and expire at the earliest collected Craft deadline. When Craft invalidates element caches, related static cache entries are cleared as well. A render that overlaps an invalidation is not cached.
+
+The `locks.store` cache store must support atomic locks and be shared by all web and worker processes. Without atomic locks, new responses are not cached. Use the same store configuration on every application instance.
 
 ## Publishing Static Files
 
@@ -90,10 +92,14 @@ Set `publish` to `true` to write cached HTML to disk:
 Published files follow the following format:
 
 ```text
-public/static/{host}{request-path}_{query-string}.html
+public/static/{host}{request-path}/index_{query-string}.html
 ```
 
-For example, `/news?page=2` on `example.test` is written to `public/static/example.test/news_page=2.html`.
+For example, `/news?page=2` on `example.test` is written to `public/static/example.test/news/index_page=2.html`. The homepage is written to `public/static/example.test/index_.html`.
+
+Responses with a collected expiry deadline or content transformed by a replacer, including CSRF placeholders, are cached only in PHP. They are not published because direct static delivery cannot enforce expiry or restore per-request values. Published files are replaced atomically so readers receive either the complete old response or the complete new response.
+
+When upgrading from the previous filename layout, clear existing static cache entries and remove any remaining old published files before enabling the updated rewrite rules. Canonical response keys are versioned, so previous payloads are not reused. Apply application security headers at the web-server level as well when serving HTML directly from disk.
 
 ## Server Rewrite Rules
 
@@ -117,7 +123,7 @@ location / {
 }
 
 location @static {
-    try_files /static/${host}${uri}_.html $uri $uri/ /index.php?$args;
+    try_files /static/${host}${uri}/index_.html $uri $uri/ /index.php?$args;
 }
 
 location @not_static {
@@ -139,7 +145,7 @@ location / {
 }
 
 location @static {
-    try_files /static/${host}${uri}_$args.html $uri $uri/ /index.php?$args;
+    try_files /static/${host}${uri}/index_$args.html $uri $uri/ /index.php?$args;
 }
 
 location @not_static {
@@ -152,17 +158,17 @@ location @not_static {
 Use this when query parameters are ignored:
 
 ```apache
-RewriteCond %{DOCUMENT_ROOT}/static/%{HTTP_HOST}%{REQUEST_URI}_\.html -s
+RewriteCond %{DOCUMENT_ROOT}/static/%{HTTP_HOST}%{REQUEST_URI}/index_\.html -s
 RewriteCond %{REQUEST_METHOD} GET
-RewriteRule .* static/%{HTTP_HOST}%{REQUEST_URI}_\.html [L,T=text/html]
+RewriteRule .* static/%{HTTP_HOST}%{REQUEST_URI}/index_\.html [L,T=text/html]
 ```
 
 Use this when query parameters are part of the cache key:
 
 ```apache
-RewriteCond %{DOCUMENT_ROOT}/static/%{HTTP_HOST}%{REQUEST_URI}_%{QUERY_STRING}\.html -s
+RewriteCond %{DOCUMENT_ROOT}/static/%{HTTP_HOST}%{REQUEST_URI}/index_%{QUERY_STRING}\.html -s
 RewriteCond %{REQUEST_METHOD} GET
-RewriteRule .* static/%{HTTP_HOST}%{REQUEST_URI}_%{QUERY_STRING}\.html [L,T=text/html]
+RewriteRule .* static/%{HTTP_HOST}%{REQUEST_URI}/index_%{QUERY_STRING}\.html [L,T=text/html]
 ```
 
 If you change `disk.path`, update the `/static` prefix in these rules to match the public path your server can access.
@@ -250,7 +256,9 @@ The warm command makes real same-site `GET` requests, so normal Craft routing, m
 ],
 ```
 
-Relative extra URLs are expanded against every enabled site. Absolute extra URLs must match one of the configured Craft site hosts; external URLs are ignored.
+Relative extra URLs are expanded against every enabled site. Absolute extra URLs must match a configured site's HTTP(S) scheme, host, port, and base path. External URLs are ignored. Redirects are not followed, even within the same site, so warming headers cannot leak to redirect destinations. Configure the final URL instead.
+
+By default, warming skips a URL only when its canonical cache payload still exists. An index row left behind after cache eviction does not prevent warming. Concurrency and timeout options must be positive integers.
 
 Useful command options:
 

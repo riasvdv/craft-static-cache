@@ -78,6 +78,7 @@ it('invalidates cached entry pages when the entry is saved again', function () {
 
         return response('<html>Example post</html>', 200, [
             'Content-Type' => 'text/html; charset=UTF-8',
+            'Cache-Control' => 'public',
         ]);
     });
 
@@ -105,7 +106,7 @@ it('invalidates cached entry pages when the entry is saved again', function () {
         ->and($cacheEntry->tags)
         ->toContain('element::'.Entry::class, "element::{$entry->id}")
         ->and($cacheEntry->filePath)
-        ->toBe("{$basePath}/localhost/news/{$suffix}_.html")
+        ->toBe("{$basePath}/localhost/news/{$suffix}/index_.html")
         ->and(is_file($cacheEntry->filePath))
         ->toBeTrue();
 
@@ -119,4 +120,24 @@ it('invalidates cached entry pages when the entry is saved again', function () {
         ->toBeFalse();
 
     File::deleteDirectory($basePath);
+});
+
+it('applies global invalidation rules even without matching page dependencies', function () {
+    config()->set('craft.static-cache.enabled', true);
+    config()->set('craft.static-cache.invalidation.rules.all', ['/global-rule']);
+
+    Route::middleware('craft.web')->get('global-rule', fn () => response('<html>global</html>', headers: [
+        'Cache-Control' => 'public',
+    ]));
+    Route::middleware('craft.web')->get('unrelated-rule', fn () => response('<html>unrelated</html>', headers: [
+        'Cache-Control' => 'public',
+    ]));
+
+    $this->get('/global-rule')->assertHeader('X-Static-Cache', 'MISS');
+    $this->get('/unrelated-rule')->assertHeader('X-Static-Cache', 'MISS');
+
+    ElementCaches::invalidateAll();
+
+    $this->get('/global-rule')->assertHeader('X-Static-Cache', 'MISS');
+    $this->get('/unrelated-rule')->assertHeader('X-Static-Cache', 'HIT');
 });
