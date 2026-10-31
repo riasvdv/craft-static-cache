@@ -69,7 +69,7 @@ class WarmCommand extends Command
         }
 
         $result = task(
-            label: 'Warming '.count($urls).' static cache '.Str::plural('URL', count($urls)),
+            label: 'Warming '.count($urls).' static cache '.(count($urls) === 1 ? 'URL' : 'URLs'),
             callback: fn (Logger $log): WarmResult => $this->warmAndLogUrls($warmer, $urls, $options, $log),
             limit: 0,
             keepSummary: true,
@@ -77,7 +77,7 @@ class WarmCommand extends Command
         );
 
         info(
-            "Warmed {$result->successful}/{$result->total} static cache ".Str::plural('URL', $result->total).'.',
+            "Warmed {$result->successful}/{$result->total} static cache ".($result->total === 1 ? 'URL' : 'URLs').'.',
         );
 
         if ($result->failed() > 0) {

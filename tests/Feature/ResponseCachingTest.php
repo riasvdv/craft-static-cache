@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Route;
 use Rias\CraftStaticCache\Invalidator;
 use Rias\CraftStaticCache\Repositories\CacheEntryRepository;
+use Rias\CraftStaticCache\StaticCache;
 
 beforeEach(function () {
     config()->set('craft.static-cache.enabled', true);
@@ -31,6 +32,26 @@ it('serves complete GET responses after a first HEAD request', function () {
     $this->get('/response-head')->assertHeader('X-Static-Cache', 'HIT')->assertSee('complete');
     $this->head('/response-head')->assertHeader('X-Static-Cache', 'HIT')->assertContent('');
     $this->get('/response-head')->assertSee('complete');
+});
+
+it('reads responses back from a cache store resolved before the plugin registered', function () {
+    config()->set('craft.static-cache.store', 'file');
+    /** Applications restrict cache unserialization; Testbench leaves it unrestricted. */
+    config()->set('cache.serializable_classes', []);
+
+    Cache::forgetDriver('file');
+    Cache::store('file')->flush();
+
+    StaticCache::getInstance()->register();
+
+    Route::middleware('craft.web')->get('response-early-store', fn () => response('<html>early</html>', headers: [
+        'Cache-Control' => 'public',
+    ]));
+
+    $this->get('/response-early-store')->assertHeader('X-Static-Cache', 'MISS');
+    $this->get('/response-early-store')->assertHeader('X-Static-Cache', 'HIT')->assertSee('early');
+
+    Cache::store('file')->flush();
 });
 
 it('preserves end-to-end security headers without replaying connection headers', function () {

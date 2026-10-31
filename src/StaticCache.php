@@ -7,8 +7,11 @@ namespace Rias\CraftStaticCache;
 use CraftCms\Cms\Element\Events\ElementCachesInvalidated;
 use CraftCms\Cms\Http\Middleware\HandleTemplateRequest;
 use CraftCms\Cms\Plugin\Plugin;
+use Illuminate\Cache\CacheManager;
+use Illuminate\Container\Container;
 use Illuminate\Foundation\Console\AboutCommand;
 use Illuminate\Routing\Router;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Event;
 use Rias\CraftStaticCache\Commands\ClearCommand;
 use Rias\CraftStaticCache\Commands\ClearTagsCommand;
@@ -39,6 +42,29 @@ class StaticCache extends Plugin
         $this->registerSerializableClasses([
             CachedResponse::class,
         ]);
+
+        $this->forgetResolvedCacheStores();
+    }
+
+    /**
+     * Cache stores copy `cache.serializable_classes` when they are built, so a store
+     * resolved before this plugin registers would read cached responses back as
+     * incomplete classes. Forget those stores so they rebuild with the full list.
+     * Array stores are kept because forgetting them would discard their contents.
+     */
+    private function forgetResolvedCacheStores(): void
+    {
+        if (! $this->app->resolved('cache')) {
+            return;
+        }
+
+        $stores = array_keys(array_filter(
+            Config::array('cache.stores', []),
+            fn (mixed $store): bool => ($store['driver'] ?? null) !== 'array',
+        ));
+
+        $this->app->make(CacheManager::class)->forgetDriver($stores);
+        Container::getInstance()->forgetInstance('cache.store');
     }
 
     public function boot(): void

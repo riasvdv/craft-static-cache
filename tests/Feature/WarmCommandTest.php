@@ -69,27 +69,29 @@ it('warms only uncached configured URLs by default with request options', functi
 });
 
 it('warms cached configured URLs when all is requested', function () {
-    config()->set('craft.static-cache.warming.urls', ['/cached']);
+    config()->set('craft.static-cache.warming.urls', ['/cached', '/also-cached']);
 
-    app(StaticCacheStore::class)->put(
-        app(CacheContextFactory::class)->make(SiteRequest::create('/cached')),
-        new Response('<html>Cached</html>'),
-        ['static-cache'],
-    );
+    foreach (['/cached', '/also-cached'] as $path) {
+        app(StaticCacheStore::class)->put(
+            app(CacheContextFactory::class)->make(SiteRequest::create($path)),
+            new Response('<html>Cached</html>'),
+            ['static-cache'],
+        );
+    }
 
     Http::preventStrayRequests();
     Http::fake([
-        'https://localhost/cached' => Http::response('OK'),
+        'https://localhost/*' => Http::response('OK'),
     ]);
 
     $this
         ->artisan('craft:static-cache:warm', [
             '--all' => true,
         ])
-        ->expectsOutputToContain('Warmed 1/1 static cache URL.')
+        ->expectsOutputToContain('Warmed 2/2 static cache URLs.')
         ->assertSuccessful();
 
-    Http::assertSentCount(1);
+    Http::assertSentCount(2);
 });
 
 it('does not forward warming headers through redirects', function (string $destination, int $status) {
