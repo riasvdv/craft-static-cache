@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+SECONDS=0
+
+echo "[${SECONDS}s] Checking system packages"
+packages=(ca-certificates curl git unzip php8.5-cli php8.5-curl php8.5-mbstring
+    php8.5-xml php8.5-zip php8.5-intl php8.5-bcmath php8.5-gd php8.5-sqlite3)
+missing=()
+for package in "${packages[@]}"; do
+    if ! dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -qx 'install ok installed'; then
+        missing+=("$package")
+    fi
+done
+
+if ((${#missing[@]})); then
+    # Debian 12's default PHP is too old. Use Sury's signed PHP packages.
+    if [[ ! -f /etc/apt/sources.list.d/php.list ]]; then
+        sudo apt-get update -qq
+        sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates curl
+        keyring=$(mktemp)
+        curl -fsSL https://packages.sury.org/debsuryorg-archive-keyring.deb -o "$keyring"
+        sudo dpkg -i "$keyring"
+        rm -f "$keyring"
+        source /etc/os-release
+        echo "deb [signed-by=/usr/share/keyrings/debsuryorg-archive-keyring.gpg] https://packages.sury.org/php/ ${VERSION_CODENAME} main" \
+            | sudo tee /etc/apt/sources.list.d/php.list >/dev/null
+    fi
+    sudo apt-get update -qq
+    sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${missing[@]}"
+fi
+sudo update-alternatives --set php /usr/bin/php8.5
+php -r 'exit(PHP_MAJOR_VERSION === 8 && PHP_MINOR_VERSION === 5 ? 0 : 1);'
+
+echo "[${SECONDS}s] Checking Composer"
+if ! command -v composer >/dev/null; then
+    installer=$(mktemp)
+    trap 'rm -f "$installer"' EXIT
+    curl -fsSL https://getcomposer.org/installer -o "$installer"
+    signature=$(curl -fsSL https://composer.github.io/installer.sig)
+    php -r 'exit(hash_file("sha384", $argv[1]) === $argv[2] ? 0 : 1);' "$installer" "$signature"
+    sudo php "$installer" --2 --install-dir=/usr/local/bin --filename=composer
+    rm -f "$installer"
+    trap - EXIT
+fi
+
+echo "[${SECONDS}s] Installing Composer development dependencies"
+# This library ignores composer.lock. Preserve the generated lock and vendor tree
+# in the snapshot so warm setup uses install rather than resolving again.
+composer install --no-interaction --prefer-dist --no-progress
+echo "[${SECONDS}s] Setup complete"

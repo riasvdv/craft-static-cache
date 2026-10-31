@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# PHP and Composer persist in the snapshot. Tests use in-memory SQLite and
+# require no services, credentials, or dependency installation on resume.
