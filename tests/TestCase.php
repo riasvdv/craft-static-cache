@@ -8,6 +8,7 @@ use CraftCms\Cms\Database\Migrations\Install;
 use CraftCms\Cms\Database\Migrator;
 use CraftCms\Cms\Plugin\Testing\PluginTestCase;
 use CraftCms\Cms\Site\Data\Site;
+use CraftCms\Cms\Support\Facades\ResponseTagger;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
 use Override;
@@ -65,6 +66,13 @@ abstract class TestCase extends PluginTestCase
             $pluginMigration = include dirname(__DIR__).'/database/migrations/Install.php';
             $pluginMigration->up();
         }
+    }
+
+    /** Craft's facades are Twig globals through their aliases, which `PluginTestCase` doesn't load. */
+    #[Override]
+    protected function getPackageAliases($app): array
+    {
+        return ['ResponseTagger' => ResponseTagger::class];
     }
 
     #[Override]

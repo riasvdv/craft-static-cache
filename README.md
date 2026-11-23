@@ -73,7 +73,9 @@ Once `enabled` is set to `true`, the package will cache anonymous `GET` site req
 
 Requests are not cached when they are action requests, preview requests, tokenized requests, authenticated requests, or match an excluded URI pattern. Responses are not cached when they are not `200` responses, set cookies, are non-HTML responses, or include `private`, `no-store`, or `no-cache` in `Cache-Control`. Laravel responses default to private; explicitly mark public pages with `Cache-Control: public` in the response or in middleware that runs inside the static cache middleware.
 
-Cached entries are tagged with Craft element cache dependencies and expire at the earliest collected Craft deadline. When Craft invalidates element caches, related static cache entries are cleared as well. A render that overlaps an invalidation is not cached.
+These rules live in `Rias\CraftStaticCache\Http\StaticCachePolicy`, which extends Craft's `DefaultCachePolicy` and applies only to the static cache. To change them, bind your own subclass of it.
+
+Cached entries are tagged with Craft element cache dependencies and the tags added through Craft's `ResponseTagger`, and expire at the earliest collected Craft deadline. When Craft invalidates element caches, related static cache entries are cleared as well. A render that overlaps an invalidation is not cached.
 
 The `locks.store` cache store must support atomic locks and be shared by all web and worker processes. Without atomic locks, new responses are not cached. Use the same store configuration on every application instance.
 
@@ -177,7 +179,25 @@ When query parameters are ignored, all query-string variants can resolve to the 
 
 ## Invalidation
 
-Craft Static Cache tracks the element cache tags collected while a page is rendered. When Craft invalidates element caches, cached pages with matching dependency tags are cleared automatically. This removes both the Laravel cache entry and any published static file.
+Craft Static Cache tracks the element cache tags collected while a page is rendered, plus any tags added with Craft's `ResponseTagger`:
+
+```twig
+{% do ResponseTagger.addTags(['nav']) %}
+```
+
+When Craft invalidates element caches, cached pages with matching dependency tags are cleared automatically. This removes both the Laravel cache entry and any published static file.
+
+The plugin also adds a `static-cache` client to Craft's HTTP cache clients, so you can purge it like a proxy or CDN:
+
+```php
+use CraftCms\Cms\Support\Facades\HttpCache;
+
+HttpCache::invalidator('static-cache')->invalidateTags(['nav'])->flush();
+HttpCache::invalidator('static-cache')->invalidatePath('https://example.test/news')->flush();
+HttpCache::invalidator('static-cache')->clearCache()->flush();
+```
+
+To purge the static cache and a CDN together, register a driver with `HttpCache::extend()` that returns a FOSHttpCache `MultiplexerClient` of `HttpCache::client('static-cache')` and the CDN's client, then add a client that uses it in `config/craft/http-cache.php`.
 
 Entry changes can also clear related pages through invalidation rules. Rule keys usually match section handles, so saving an entry in the `news` section can clear listing pages like `/news` and `/news/*`.
 
