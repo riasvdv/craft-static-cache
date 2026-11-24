@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Rias\CraftStaticCache\Http\Middleware;
 
 use Closure;
-use CraftCms\Cms\HttpCache\ResponseTagger;
+use CraftCms\Cms\Http\ResponseCacheInfo;
 use Illuminate\Contracts\Cache\LockProvider;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\Request;
@@ -14,7 +14,7 @@ use Rias\CraftStaticCache\CacheContextFactory;
 use Rias\CraftStaticCache\CacheState;
 use Rias\CraftStaticCache\Configuration;
 use Rias\CraftStaticCache\Data\CacheContext;
-use Rias\CraftStaticCache\Http\StaticCachePolicy;
+use Rias\CraftStaticCache\Http\StaticCacheProfile;
 use Rias\CraftStaticCache\Stores\StaticCacheStore;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -22,16 +22,16 @@ readonly class CacheStaticResponse
 {
     public function __construct(
         private Configuration $config,
-        private StaticCachePolicy $policy,
+        private StaticCacheProfile $profile,
         private CacheContextFactory $cacheContext,
         private StaticCacheStore $store,
         private CacheState $state,
-        private ResponseTagger $tagger,
+        private ResponseCacheInfo $cacheInfo,
     ) {}
 
     public function handle(Request $request, Closure $next): mixed
     {
-        if (! $this->config->enabled() || ! $this->policy->isRequestCacheable($request)) {
+        if (! $this->config->enabled() || ! $this->profile->isRequestCacheable($request)) {
             return $next($request);
         }
 
@@ -84,9 +84,9 @@ readonly class CacheStaticResponse
 
         $response = $next($request);
 
-        if ($response instanceof Response && $this->policy->isResponseCacheable($request, $response)) {
-            $tags = array_values(array_unique(['static-cache', ...$this->tagger->getTags()]));
-            $expiresAt = $this->tagger->getExpiryDate()?->getTimestamp();
+        if ($response instanceof Response && $this->profile->isResponseCacheable($request, $response)) {
+            $tags = array_values(array_unique(['static-cache', ...$this->cacheInfo->getTags()]));
+            $expiresAt = $this->cacheInfo->getExpiryDate()?->getTimestamp();
             $ttl = $expiresAt !== null ? max(0, $expiresAt - now()->getTimestamp()) : null;
 
             try {

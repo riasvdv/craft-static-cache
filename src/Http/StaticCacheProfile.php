@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Rias\CraftStaticCache\Http;
 
-use CraftCms\HttpCache\DefaultCachePolicy;
+use CraftCms\HttpCache\DefaultCacheProfile;
 use Illuminate\Http\Request;
 use Override;
 use Rias\CraftStaticCache\Configuration;
@@ -13,10 +13,10 @@ use Symfony\Component\HttpFoundation\Response;
 /**
  * Caches anonymous HTML pages.
  *
- * Unlike {@see DefaultCachePolicy}, it stores public responses without a lifetime, which stay cached until they're
+ * Unlike {@see DefaultCacheProfile}, it stores public responses without a lifetime, which stay cached until they're
  * invalidated or an element they show expires.
  */
-class StaticCachePolicy extends DefaultCachePolicy
+class StaticCacheProfile extends DefaultCacheProfile
 {
     public function __construct(
         private readonly Configuration $config,

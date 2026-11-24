@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use CraftCms\Cms\Support\Facades\ElementCaches;
-use CraftCms\Cms\Support\Facades\ResponseTagger;
+use CraftCms\Cms\Support\Facades\ResponseCacheInfo;
 use CraftCms\HttpCache\Facades\HttpCache;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
@@ -111,7 +111,7 @@ it('expires at the collected Craft deadline without publishing a timeless file',
     $this->travel(9)->seconds();
     $this->get('/response-expiry')->assertHeader('X-Static-Cache', 'HIT')->assertSee('version 2');
     $this->travel(1)->seconds();
-    // Laravel keeps scoped instances, such as the response tagger and its expiry, between test requests.
+    // Laravel keeps scoped instances, such as the response cache info and its expiry, between test requests.
     app()->forgetScopedInstances();
     $this->get('/response-expiry')->assertHeader('X-Static-Cache', 'MISS')->assertSee('version 3');
 
@@ -167,14 +167,14 @@ it('does not cache a render invalidated before its dependencies are registered',
     $this->get('/response-race')->assertHeader('X-Static-Cache', 'HIT')->assertSee('updated content');
 });
 
-it('stores the tags added through the response tagger', function () {
+it('stores the tags added through the response cache info', function () {
     Route::middleware('craft.web')->get('response-tagged', function () {
         ElementCaches::collectCacheTags(['element::response-tagged']);
-        ResponseTagger::addTags(['from-php']);
+        ResponseCacheInfo::addTags(['from-php']);
 
         return response(
             renderString(
-                "{% cache globally using key 'response-tagged' %}{% do ResponseTagger.addTags(['from-twig']) %}{% endcache %}<html>tagged</html>",
+                "{% cache globally using key 'response-tagged' %}{% do ResponseCacheInfo.addTags(['from-twig']) %}{% endcache %}<html>tagged</html>",
             ),
             headers: ['Cache-Control' => 'public'],
         );
@@ -197,7 +197,7 @@ it('stores the tags added through the response tagger', function () {
 it('purges entries through the static-cache HTTP cache client', function () {
     foreach (['nav', 'footer'] as $tag) {
         Route::middleware('craft.web')->get("response-{$tag}", function () use ($tag) {
-            ResponseTagger::addTags([$tag]);
+            ResponseCacheInfo::addTags([$tag]);
 
             return response("<html>{$tag}</html>", headers: ['Cache-Control' => 'public']);
         });
@@ -205,7 +205,7 @@ it('purges entries through the static-cache HTTP cache client', function () {
 
     $warm = function (): void {
         foreach (['/response-nav', '/response-footer'] as $uri) {
-            // Laravel keeps scoped instances, such as the response tagger, between test requests.
+            // Laravel keeps scoped instances, such as the response cache info, between test requests.
             app()->forgetScopedInstances();
             $this->get($uri);
         }
