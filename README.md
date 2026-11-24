@@ -179,11 +179,7 @@ When query parameters are ignored, all query-string variants can resolve to the 
 
 ## Invalidation
 
-Craft Static Cache tracks the element cache tags collected while a page is rendered, plus any tags added with Craft's `ResponseTagger`:
-
-```twig
-{% do ResponseTagger.addTags(['nav']) %}
-```
+Craft Static Cache tracks the element cache tags collected while a page is rendered, plus any tags added with Craft's `ResponseTagger`.
 
 When Craft invalidates element caches, cached pages with matching dependency tags are cleared automatically. This removes both the Laravel cache entry and any published static file.
 
