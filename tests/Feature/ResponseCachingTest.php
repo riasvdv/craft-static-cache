@@ -3,8 +3,8 @@
 declare(strict_types=1);
 
 use CraftCms\Cms\Support\Facades\ElementCaches;
-use CraftCms\Cms\Support\Facades\HttpCache;
 use CraftCms\Cms\Support\Facades\ResponseTagger;
+use CraftCms\HttpCache\Facades\HttpCache;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Route;

@@ -193,7 +193,7 @@ HttpCache::invalidator('static-cache')->invalidatePath('https://example.test/new
 HttpCache::invalidator('static-cache')->clearCache()->flush();
 ```
 
-To purge the static cache and a CDN together, register a driver with `HttpCache::extend()` that returns a FOSHttpCache `MultiplexerClient` of `HttpCache::client('static-cache')` and the CDN's client, then add a client that uses it in `config/craft/http-cache.php`.
+To purge the static cache and a CDN together, register a driver with `HttpCache::extend()` that returns a FOSHttpCache `MultiplexerClient` of `HttpCache::client('static-cache')` and the CDN's client, then add a client that uses it in `config/http-cache.php`.
 
 Entry changes can also clear related pages through invalidation rules. Rule keys usually match section handles, so saving an entry in the `news` section can clear listing pages like `/news` and `/news/*`.
 

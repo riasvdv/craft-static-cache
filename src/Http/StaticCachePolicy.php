@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Rias\CraftStaticCache\Http;
 
-use CraftCms\Cms\HttpCache\DefaultCachePolicy;
+use CraftCms\HttpCache\DefaultCachePolicy;
 use Illuminate\Http\Request;
 use Override;
 use Rias\CraftStaticCache\Configuration;

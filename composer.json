@@ -3,11 +3,18 @@
     "description": "Full-page static caching for Craft CMS.",
     "type": "craft-plugin",
     "license": "MIT",
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "https://github.com/craftcms/http-cache"
+        }
+    ],
     "require": {
         "ext-uri": "*",
         "php": "^8.5",
         "craftcms/cms": "dev-timkelty/http-cache",
-        "craftcms/cms-assets": "6.x-dev as dev-timkelty/http-cache"
+        "craftcms/cms-assets": "6.x-dev as dev-timkelty/http-cache",
+        "craftcms/http-cache": "dev-main"
     },
     "require-dev": {
         "carthage-software/mago": "^1.26",

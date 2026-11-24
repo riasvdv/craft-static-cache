@@ -7,7 +7,7 @@ namespace Rias\CraftStaticCache;
 use CraftCms\Cms\Element\Events\ElementCachesInvalidated;
 use CraftCms\Cms\Http\Middleware\HandleTemplateRequest;
 use CraftCms\Cms\Plugin\Plugin;
-use CraftCms\Cms\Support\Facades\HttpCache;
+use CraftCms\HttpCache\Facades\HttpCache;
 use Illuminate\Cache\CacheManager;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Foundation\Application;
