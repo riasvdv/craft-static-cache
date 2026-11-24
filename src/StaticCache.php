@@ -111,12 +111,18 @@ class StaticCache extends Plugin
 
     /**
      * Adds the `static-cache` client, so `HttpCache::invalidator('static-cache')` purges the static cache.
+     *
+     * The config entry lists it among the clients that receive invalidated element tags.
      */
     private function registerHttpCacheClient(): void
     {
         HttpCache::extend('static-cache', static fn (Application $app): StaticCacheProxyClient => $app->make(
             StaticCacheProxyClient::class,
         ));
+
+        if (! Config::has('http-cache.clients.static-cache')) {
+            Config::set('http-cache.clients.static-cache', []);
+        }
     }
 
     private function registerMiddleware(): void

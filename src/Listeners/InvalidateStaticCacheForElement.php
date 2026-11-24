@@ -16,7 +16,6 @@ readonly class InvalidateStaticCacheForElement
 
     public function handle(ElementCachesInvalidated $event): void
     {
-        $this->invalidator->clearTags(array_values($event->tags));
         $this->invalidator->clearRules('all');
 
         if ($event->element instanceof Entry) {

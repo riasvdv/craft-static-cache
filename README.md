@@ -181,7 +181,7 @@ When query parameters are ignored, all query-string variants can resolve to the 
 
 Craft Static Cache tracks the element cache tags collected while a page is rendered, plus any tags added with Craft's `ResponseCacheInfo`.
 
-When Craft invalidates element caches, cached pages with matching dependency tags are cleared automatically. This removes both the Laravel cache entry and any published static file.
+When Craft invalidates element caches, Craft's HTTP cache package sends the element tags to the plugin's `static-cache` client after the request, command or job, and cached pages with matching tags are cleared. This removes both the Laravel cache entry and any published static file.
 
 The plugin also adds a `static-cache` client to Craft's HTTP cache clients, so you can purge it like a proxy or CDN:
 
