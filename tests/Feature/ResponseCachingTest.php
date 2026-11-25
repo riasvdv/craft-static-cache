@@ -2,13 +2,17 @@
 
 declare(strict_types=1);
 
+use CraftCms\Cms\Support\Facades\CacheInfo;
 use CraftCms\Cms\Support\Facades\ElementCaches;
+use CraftCms\HttpCache\Facades\HttpCache;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Route;
 use Rias\CraftStaticCache\Invalidator;
 use Rias\CraftStaticCache\Repositories\CacheEntryRepository;
 use Rias\CraftStaticCache\StaticCache;
+
+use function CraftCms\Cms\renderString;
 
 beforeEach(function () {
     config()->set('craft.static-cache.enabled', true);
@@ -107,6 +111,8 @@ it('expires at the collected Craft deadline without publishing a timeless file',
     $this->travel(9)->seconds();
     $this->get('/response-expiry')->assertHeader('X-Static-Cache', 'HIT')->assertSee('version 2');
     $this->travel(1)->seconds();
+    // Laravel keeps scoped instances, such as the response cache info and its expiry, between test requests.
+    app()->forgetScopedInstances();
     $this->get('/response-expiry')->assertHeader('X-Static-Cache', 'MISS')->assertSee('version 3');
 
     expect(app(CacheEntryRepository::class)->all()->first()->filePath)->toBeNull();
@@ -159,4 +165,68 @@ it('does not cache a render invalidated before its dependencies are registered',
     $content = 'updated content';
     $this->get('/response-race')->assertHeader('X-Static-Cache', 'MISS')->assertSee('updated content');
     $this->get('/response-race')->assertHeader('X-Static-Cache', 'HIT')->assertSee('updated content');
+});
+
+it('stores the tags added through the response cache info', function () {
+    Route::middleware('craft.web')->get('response-tagged', function () {
+        ElementCaches::collectCacheTags(['element::response-tagged']);
+        CacheInfo::addTags(['from-php']);
+
+        return response(
+            renderString(
+                "{% cache globally using key 'response-tagged' %}{% do CacheInfo.addTags(['from-twig']) %}{% endcache %}<html>tagged</html>",
+            ),
+            headers: ['Cache-Control' => 'public'],
+        );
+    });
+
+    // The second render takes `from-twig` from the template cache.
+    foreach ([1, 2] as $render) {
+        app()->forgetScopedInstances();
+        $this->get('/response-tagged')->assertHeader('X-Static-Cache', 'MISS');
+
+        expect(app(CacheEntryRepository::class)->all()->first()->tags)
+            ->toContain('static-cache', 'element::response-tagged', 'from-php', 'from-twig');
+
+        app(Invalidator::class)->clearTags(['from-twig']);
+
+        expect(app(CacheEntryRepository::class)->count())->toBe(0);
+    }
+});
+
+it('purges entries through the static-cache HTTP cache client', function () {
+    foreach (['nav', 'footer'] as $tag) {
+        Route::middleware('craft.web')->get("response-{$tag}", function () use ($tag) {
+            CacheInfo::addTags([$tag]);
+
+            return response("<html>{$tag}</html>", headers: ['Cache-Control' => 'public']);
+        });
+    }
+
+    $warm = function (): void {
+        foreach (['/response-nav', '/response-footer'] as $uri) {
+            // Laravel keeps scoped instances, such as the response cache info, between test requests.
+            app()->forgetScopedInstances();
+            $this->get($uri);
+        }
+    };
+
+    $warm();
+    $this->get('/response-nav')->assertHeader('X-Static-Cache', 'HIT');
+
+    expect(HttpCache::invalidator('static-cache')->invalidateTags(['nav'])->flush())->toBe(1);
+    $this->get('/response-nav')->assertHeader('X-Static-Cache', 'MISS');
+    $this->get('/response-footer')->assertHeader('X-Static-Cache', 'HIT');
+
+    expect(HttpCache::invalidator('static-cache')->invalidatePath('https://localhost/response-footer')->flush())
+        ->toBe(1);
+    $this->get('/response-footer')->assertHeader('X-Static-Cache', 'MISS');
+
+    $warm();
+    expect(HttpCache::invalidator('static-cache')->clearCache()->flush())
+        ->toBe(2)
+        ->and(app(CacheEntryRepository::class)->count())
+        ->toBe(0)
+        ->and(File::allFiles(config('craft.static-cache.disk.path')))
+        ->toBeEmpty();
 });

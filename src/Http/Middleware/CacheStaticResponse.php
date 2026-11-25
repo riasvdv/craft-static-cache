@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Rias\CraftStaticCache\Http\Middleware;
 
 use Closure;
-use CraftCms\Cms\Support\Facades\ElementCaches;
+use CraftCms\Cms\Http\CacheInfo;
 use Illuminate\Contracts\Cache\LockProvider;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\Request;
@@ -14,24 +14,24 @@ use Rias\CraftStaticCache\CacheContextFactory;
 use Rias\CraftStaticCache\CacheState;
 use Rias\CraftStaticCache\Configuration;
 use Rias\CraftStaticCache\Data\CacheContext;
-use Rias\CraftStaticCache\Http\ResponseEligibility;
+use Rias\CraftStaticCache\Http\StaticCacheProfile;
 use Rias\CraftStaticCache\Stores\StaticCacheStore;
 use Symfony\Component\HttpFoundation\Response;
-use Throwable;
 
 readonly class CacheStaticResponse
 {
     public function __construct(
         private Configuration $config,
-        private ResponseEligibility $eligibility,
+        private StaticCacheProfile $profile,
         private CacheContextFactory $cacheContext,
         private StaticCacheStore $store,
         private CacheState $state,
+        private CacheInfo $cacheInfo,
     ) {}
 
     public function handle(Request $request, Closure $next): mixed
     {
-        if (! $this->config->enabled() || ! $this->eligibility->requestIsCacheable($request)) {
+        if (! $this->config->enabled() || ! $this->profile->isRequestCacheable($request)) {
             return $next($request);
         }
 
@@ -82,19 +82,12 @@ readonly class CacheStaticResponse
             return $next($request);
         }
 
-        ElementCaches::startCollectingCacheInfo();
+        $response = $next($request);
 
-        try {
-            $response = $next($request);
-            [$dependency, $ttl] = ElementCaches::stopCollectingCacheInfo();
-        } catch (Throwable $throwable) {
-            $this->stopCollectingQuietly();
-
-            throw $throwable;
-        }
-
-        if ($response instanceof Response && $this->eligibility->responseIsCacheable($response)) {
-            $tags = array_values(array_unique(array_merge(['static-cache'], $dependency?->tags ?? [])));
+        if ($response instanceof Response && $this->profile->isResponseCacheable($request, $response)) {
+            $tags = array_values(array_unique(['static-cache', ...$this->cacheInfo->getTags()]));
+            $expiresAt = $this->cacheInfo->getExpiryDate()?->getTimestamp();
+            $ttl = $expiresAt !== null ? max(0, $expiresAt - now()->getTimestamp()) : null;
 
             try {
                 if ($this->store->put($context, $response, $tags, $ttl, $version)) {
@@ -106,13 +99,5 @@ readonly class CacheStaticResponse
         }
 
         return $response;
-    }
-
-    private function stopCollectingQuietly(): void
-    {
-        try {
-            ElementCaches::stopCollectingCacheInfo();
-        } catch (Throwable) {
-        }
     }
 }

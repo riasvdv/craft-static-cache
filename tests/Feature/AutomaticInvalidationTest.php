@@ -12,6 +12,7 @@ use CraftCms\Cms\Support\Facades\Elements;
 use CraftCms\Cms\Support\Facades\EntryTypes;
 use CraftCms\Cms\Support\Facades\Sections;
 use CraftCms\Cms\Support\Facades\Sites;
+use CraftCms\HttpCache\Facades\HttpCache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
@@ -73,6 +74,9 @@ it('invalidates cached entry pages when the entry is saved again', function () {
 
     expect(Elements::saveElement($entry, false))->toBeTrue();
 
+    // Send the invalidations the setup queued, which would otherwise clear the page after the first request.
+    HttpCache::sendInvalidations();
+
     Route::middleware('craft.web')->get($path, function () use ($entry) {
         ElementCaches::collectCacheInfoForElement($entry);
 
@@ -112,9 +116,12 @@ it('invalidates cached entry pages when the entry is saved again', function () {
 
     $entry->title = 'Updated post';
 
-    expect(Elements::saveElement($entry, false))
-        ->toBeTrue()
-        ->and($cacheEntries->count())
+    expect(Elements::saveElement($entry, false))->toBeTrue();
+
+    // The package queues element tag invalidations and sends them after the request, command or job.
+    HttpCache::sendInvalidations();
+
+    expect($cacheEntries->count())
         ->toBe(0)
         ->and(is_file($cacheEntry->filePath))
         ->toBeFalse();

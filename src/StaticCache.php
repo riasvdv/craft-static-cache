@@ -7,8 +7,10 @@ namespace Rias\CraftStaticCache;
 use CraftCms\Cms\Element\Events\ElementCachesInvalidated;
 use CraftCms\Cms\Http\Middleware\HandleTemplateRequest;
 use CraftCms\Cms\Plugin\Plugin;
+use CraftCms\HttpCache\Facades\HttpCache;
 use Illuminate\Cache\CacheManager;
 use Illuminate\Container\Container;
+use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Foundation\Console\AboutCommand;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Config;
@@ -70,6 +72,7 @@ class StaticCache extends Plugin
     public function boot(): void
     {
         $this->registerMiddleware();
+        $this->registerHttpCacheClient();
         $this->registerAboutCommandInformation();
 
         Event::listen(ElementCachesInvalidated::class, InvalidateStaticCacheForElement::class);
@@ -104,6 +107,22 @@ class StaticCache extends Plugin
         return $value
             ? '<fg=green;options=bold>ENABLED</>'
             : '<fg=yellow;options=bold>DISABLED</>';
+    }
+
+    /**
+     * Adds the `static-cache` client, so `HttpCache::invalidator('static-cache')` purges the static cache.
+     *
+     * The config entry lists it among the clients that receive invalidated element tags.
+     */
+    private function registerHttpCacheClient(): void
+    {
+        HttpCache::extend('static-cache', static fn (Application $app): StaticCacheProxyClient => $app->make(
+            StaticCacheProxyClient::class,
+        ));
+
+        if (! Config::has('http-cache.clients.static-cache')) {
+            Config::set('http-cache.clients.static-cache', []);
+        }
     }
 
     private function registerMiddleware(): void

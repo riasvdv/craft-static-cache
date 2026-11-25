@@ -4,24 +4,29 @@ declare(strict_types=1);
 
 namespace Rias\CraftStaticCache\Http;
 
+use CraftCms\HttpCache\DefaultCacheProfile;
 use Illuminate\Http\Request;
+use Override;
 use Rias\CraftStaticCache\Configuration;
 use Symfony\Component\HttpFoundation\Response;
 
-readonly class ResponseEligibility
+/**
+ * Caches anonymous HTML pages.
+ *
+ * Unlike {@see DefaultCacheProfile}, it stores public responses without a lifetime, which stay cached until they're
+ * invalidated or an element they show expires.
+ */
+class StaticCacheProfile extends DefaultCacheProfile
 {
     public function __construct(
-        private Configuration $config,
-        private RoutePatternMatcher $patterns,
+        private readonly Configuration $config,
+        private readonly RoutePatternMatcher $patterns,
     ) {}
 
-    public function requestIsCacheable(Request $request): bool
+    #[Override]
+    public function isRequestCacheable(Request $request): bool
     {
-        if (! $this->config->enabled()) {
-            return false;
-        }
-
-        if (! in_array($request->method(), ['GET', 'HEAD'], true)) {
+        if (! parent::isRequestCacheable($request)) {
             return false;
         }
 
@@ -40,7 +45,8 @@ readonly class ResponseEligibility
         return ! $this->patterns->matchesAny($request->decodedPath(), $this->config->excludedUriParts());
     }
 
-    public function responseIsCacheable(Response $response): bool
+    #[Override]
+    public function isResponseCacheable(Request $request, Response $response): bool
     {
         if ($response->getStatusCode() !== 200) {
             return false;

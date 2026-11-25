@@ -8,6 +8,7 @@ use CraftCms\Cms\Database\Migrations\Install;
 use CraftCms\Cms\Database\Migrator;
 use CraftCms\Cms\Plugin\Testing\PluginTestCase;
 use CraftCms\Cms\Site\Data\Site;
+use CraftCms\HttpCache\HttpCacheServiceProvider;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
 use Override;
@@ -65,6 +66,13 @@ abstract class TestCase extends PluginTestCase
             $pluginMigration = include dirname(__DIR__).'/database/migrations/Install.php';
             $pluginMigration->up();
         }
+    }
+
+    /** Testbench doesn't run package discovery, which registers this provider in apps. */
+    #[Override]
+    protected function getPackageProviders($app): array
+    {
+        return [...parent::getPackageProviders($app), HttpCacheServiceProvider::class];
     }
 
     #[Override]
