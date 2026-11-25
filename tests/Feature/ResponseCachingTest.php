@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
+use CraftCms\Cms\Support\Facades\CacheInfo;
 use CraftCms\Cms\Support\Facades\ElementCaches;
-use CraftCms\Cms\Support\Facades\ResponseCacheInfo;
 use CraftCms\HttpCache\Facades\HttpCache;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
@@ -170,11 +170,11 @@ it('does not cache a render invalidated before its dependencies are registered',
 it('stores the tags added through the response cache info', function () {
     Route::middleware('craft.web')->get('response-tagged', function () {
         ElementCaches::collectCacheTags(['element::response-tagged']);
-        ResponseCacheInfo::addTags(['from-php']);
+        CacheInfo::addTags(['from-php']);
 
         return response(
             renderString(
-                "{% cache globally using key 'response-tagged' %}{% do ResponseCacheInfo.addTags(['from-twig']) %}{% endcache %}<html>tagged</html>",
+                "{% cache globally using key 'response-tagged' %}{% do CacheInfo.addTags(['from-twig']) %}{% endcache %}<html>tagged</html>",
             ),
             headers: ['Cache-Control' => 'public'],
         );
@@ -197,7 +197,7 @@ it('stores the tags added through the response cache info', function () {
 it('purges entries through the static-cache HTTP cache client', function () {
     foreach (['nav', 'footer'] as $tag) {
         Route::middleware('craft.web')->get("response-{$tag}", function () use ($tag) {
-            ResponseCacheInfo::addTags([$tag]);
+            CacheInfo::addTags([$tag]);
 
             return response("<html>{$tag}</html>", headers: ['Cache-Control' => 'public']);
         });

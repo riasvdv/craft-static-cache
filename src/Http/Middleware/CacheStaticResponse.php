@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Rias\CraftStaticCache\Http\Middleware;
 
 use Closure;
-use CraftCms\Cms\Http\ResponseCacheInfo;
+use CraftCms\Cms\Http\CacheInfo;
 use Illuminate\Contracts\Cache\LockProvider;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\Request;
@@ -26,7 +26,7 @@ readonly class CacheStaticResponse
         private CacheContextFactory $cacheContext,
         private StaticCacheStore $store,
         private CacheState $state,
-        private ResponseCacheInfo $cacheInfo,
+        private CacheInfo $cacheInfo,
     ) {}
 
     public function handle(Request $request, Closure $next): mixed

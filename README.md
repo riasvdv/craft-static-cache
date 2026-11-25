@@ -75,7 +75,7 @@ Requests are not cached when they are action requests, preview requests, tokeniz
 
 These rules live in `Rias\CraftStaticCache\Http\StaticCacheProfile`, which extends Craft's `DefaultCacheProfile` and applies only to the static cache. To change them, bind your own subclass of it.
 
-Cached entries are tagged with Craft element cache dependencies and the tags added through Craft's `ResponseCacheInfo`, and expire at the earliest collected Craft deadline. When Craft invalidates element caches, related static cache entries are cleared as well. A render that overlaps an invalidation is not cached.
+Cached entries are tagged with Craft element cache dependencies and the tags added through Craft's `CacheInfo`, and expire at the earliest collected Craft deadline. When Craft invalidates element caches, related static cache entries are cleared as well. A render that overlaps an invalidation is not cached.
 
 The `locks.store` cache store must support atomic locks and be shared by all web and worker processes. Without atomic locks, new responses are not cached. Use the same store configuration on every application instance.
 
@@ -179,7 +179,7 @@ When query parameters are ignored, all query-string variants can resolve to the 
 
 ## Invalidation
 
-Craft Static Cache tracks the element cache tags collected while a page is rendered, plus any tags added with Craft's `ResponseCacheInfo`.
+Craft Static Cache tracks the element cache tags collected while a page is rendered, plus any tags added with Craft's `CacheInfo`.
 
 When Craft invalidates element caches, Craft's HTTP cache package sends the element tags to the plugin's `static-cache` client after the request, command or job, and cached pages with matching tags are cleared. This removes both the Laravel cache entry and any published static file.
 
